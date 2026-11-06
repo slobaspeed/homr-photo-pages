@@ -8,7 +8,7 @@ exact answer, pasted onto the same real paper. Made for [homr](https://github.co
 | Folder | What |
 |---|---|
 | `photos/train/` | Photos for training: real paper, light and bends to paste songs onto. |
-| `photos/test/` | **Test only, never train on these.** 43 photos of pages T43–T50, read against the exact answers in `templates/keys/`. The 10 photos the phone saved sideways were turned upright. |
+| `photos/test/` | **Test only, never train on these.** 40 photos of pages T43–T50, read against the exact answers in `templates/keys/`. The 9 photos the phone saved sideways were turned upright. |
 | `templates/` | `templates.pdf` (pages T23–T50, A4), `templates.json` (where every square and the music sit on each page), `keys/` (the exact MusicXML of the Verovio pages T35–T50), `sources.md` (the music and licence of every page). |
 | `make_templates.py` | Makes new template pages (T51 and up) from your own MusicXML. |
 | `tools/` | How the photos were cleaned (all metadata removed) and the templates copied. |

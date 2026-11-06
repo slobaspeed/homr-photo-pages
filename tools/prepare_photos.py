@@ -1,15 +1,14 @@
 """Sorts phone photos of the printed template pages into photos/train and photos/test, ready to publish.
 
 The marks on each photo say which page it shows (page k carries ids 8k..8k+7). Pages T01-T22 are left out: they
-carry the music of homr's own photo test set. T23-T42 go to photos/train, T43-T50 to photos/test (test only, never
-train on them). All metadata is dropped (phones store the position, the phone and the time); an upright photo keeps
+carry the music of homr's own photo test set. T43-T50 go to photos/test (test only, never train on them), all
+others from T23 up (new pages too) to photos/train. All metadata is dropped (phones store the position, the phone and the time); an upright photo keeps
 its image data byte for byte, a turned one is turned upright and saved again at JPEG quality 95.
 
 Run: python tools/prepare_photos.py <photo folder>... [--out <dataset folder>]
 """
 import argparse
 import collections
-import statistics
 import struct
 from pathlib import Path
 
@@ -19,12 +18,15 @@ from PIL import Image
 
 ARUCO = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
 DETECTOR = cv2.aruco.ArucoDetector(ARUCO)
-FIRST_PAGE, FIRST_TEST_PAGE, LAST_PAGE = 23, 43, 50
+FIRST_PAGE, LAST_PAGE = 23, 124  # 8 * 124 + 7 = 999, the last id of the mark dictionary
+TEST_PAGES = range(43, 51)
 SEARCH_SIZE = 2000  # long side the marks are searched at
 
 
 def strip_metadata(jpeg):
-    """The JPEG without its APP1-APP15 and COM segments (EXIF, XMP, maker notes, comments); the rest byte for byte."""
+    """The JPEG without its metadata segments (APP1-APP13, APP15: EXIF, XMP, maker notes; COM) and without anything
+    after the image's end (phones append more images, maker data or motion-photo videos there). The rest, the
+    Adobe segment (APP14, colour) included, byte for byte."""
     if jpeg[:2] != b'\xff\xd8':
         raise ValueError('not a JPEG')
     out, i = [jpeg[:2]], 2
@@ -32,11 +34,14 @@ def strip_metadata(jpeg):
         if jpeg[i] != 0xFF:
             raise ValueError(f'broken JPEG at byte {i}')
         marker = jpeg[i + 1]
-        if marker == 0xDA:  # start of scan: the image data follows to the end
-            out.append(jpeg[i:])
+        if marker == 0xDA:  # start of scan: the image data follows, up to the end-of-image marker
+            end = jpeg.find(bytes([0xFF, 0xD9]), i)  # inside the image data a 0xFF is always followed by 0x00 or a restart
+            if end < 0:
+                raise ValueError('JPEG without an end')
+            out.append(jpeg[i:end + 2])
             break
         length = struct.unpack('>H', jpeg[i + 2:i + 4])[0]
-        if not (0xE1 <= marker <= 0xEF or marker == 0xFE):
+        if not (0xE1 <= marker <= 0xEF and marker != 0xEE or marker == 0xFE):
             out.append(jpeg[i:i + 2 + length])
         i += 2 + length
     return b''.join(out)
@@ -57,16 +62,16 @@ def page_number(ids):
 
 def quarter_turns(marks):
     """k for np.rot90(image, k) that sets the page upright. A mark's first edge runs along its top, left to right."""
-    angle = statistics.median(float(np.degrees(np.arctan2(c[1][1] - c[0][1], c[1][0] - c[0][0])))
-                              for c in marks.values())
-    return round(angle / 90) % 4
+    votes = collections.Counter(round(float(np.degrees(np.arctan2(c[1][1] - c[0][1], c[1][0] - c[0][0]))) / 90) % 4
+                                for c in marks.values())  # one vote per mark: angles wrap round at 180 degrees
+    return votes.most_common(1)[0][0]
 
 
 def main(sources, out):
     counts = collections.Counter()
     written = []
     for path in sorted(p for folder in sources for p in Path(folder).iterdir() if p.suffix.lower() in ('.jpg', '.jpeg')):
-        image = cv2.imread(str(path))
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)  # as stored, untagged
         scale = SEARCH_SIZE / max(image.shape[:2])
         marks = find_marks(cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA))
         number = page_number(marks)
@@ -75,7 +80,7 @@ def main(sources, out):
             print(f'{path.name}: {"no marks" if number is None else f"page T{number:02d}"}, skipped')
             continue
         marks = {i: c for i, c in marks.items() if i // 8 == number}
-        folder = out / 'photos' / ('test' if number >= FIRST_TEST_PAGE else 'train')
+        folder = out / 'photos' / ('test' if number in TEST_PAGES else 'train')
         folder.mkdir(parents=True, exist_ok=True)
         target = folder / f'T{number:02d}__{path.name}'
         turns = quarter_turns(marks)

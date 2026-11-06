@@ -17,7 +17,9 @@ exact answer, pasted onto the same real paper. Made for [homr](https://github.co
 
 1. Print a page of `templates/templates.pdf` (or a new one from `make_templates.py`) on A4, at 100% size.
 2. Photograph it as you would to read it: any light, any phone, tilted or curled. Keep 4 or more squares in the shot.
-3. Put the photo in `photos/train/`. The squares tell which page it is; photos of T43–T50 are never used for training.
+3. Run `python tools/prepare_photos.py <your photo folder>`. It removes what phones store in a photo (where it was
+   taken, the phone, the time), turns it upright, and puts it in `photos/train/`, or in `photos/test/` for pages
+   T43–T50. Don't add photos without it: they would publish where they were taken.
 
 New pages should use music free of conditions (CC0 or public domain, e.g. OpenScore Lieder), so their photos stay
 simple to share.
